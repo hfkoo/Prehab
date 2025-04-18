@@ -244,7 +244,7 @@ for year in years:
 duration_df = pd.DataFrame(duration_data)
 if not duration_df.empty:
     fig, ax = plt.subplots(figsize=(4, 2.5))
-    sns.violinplot(data=duration_df, x='Year', y='Prehab duration', palette='gray', ax=ax)
+    sns.violinplot(data=duration_df, x='Year', y='Prehab duration', color='gray', ax=ax)
     ax.set_title('Distribution of Prehab Duration by Year', fontsize=10)
     ax.set_ylabel('Duration (days)', fontsize=8)
     ax.set_xlabel('Year', fontsize=6)
