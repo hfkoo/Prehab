@@ -22,7 +22,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("Prehabilitation Metrics Dashboard")
-st.markdown ("**Please Note** \n\n 1. Use anonymised excel sheets (delete name/MRN) \n\n 2. For data to render properly, use Prehab 2024 sheet column formatting")
+st.markdown ("**Please Note** \n\n 1. Use anonymised excel sheets (delete name/MRN) \n\n 2. For data to render properly, use 2024 sheet column formatting")
 
 # ----------------------------
 # File Upload
@@ -166,53 +166,75 @@ def center_pyplot(fig):
         st.pyplot(fig, bbox_inches="tight")
 
 # ----------------------------
-# Section 1: Prehab Counts
+# Section 1: Number of Patients
 # ----------------------------
-st.header("How many patients are receiving prehab?", divider=True)
-col1, col2 = st.columns(2)
+st.header("Number of Patients", divider=True)
 
-with col1:
-    prehab_sheet = st.selectbox("Select Year (Prehab)", prehab_sheets)
-    prehab_data = parse_sheet(xl, prehab_sheet)
-    st.write(f"Number of prehab patients overall: {prehab_data['F2F Prehab Assessment?'].count()}")
-    st.write(f"Number of prehab surgical patients: {prehab_data['Length of Stay'].count()}")
-    year_selected = prehab_sheet.split()[-1]
+# Pre-calculate all the counts
+prehab_total_counts = []
+prehab_surgical_counts = []
+non_prehab_surgical_counts = []
 
-with col2:
-    non_prehab_sheet = st.selectbox("Select Year (Non-Prehab)", non_prehab_sheets)
-    non_prehab_data = parse_sheet(xl, non_prehab_sheet)
-    st.write(f"Number of patients (surgical): {non_prehab_data['DOB (DD/MM/YYYY)'].count()}")
-
-prehab_counts, prehab_percentages = [], []
 for year in years:
-    pre_df = parse_sheet(xl, next((s for s in prehab_sheets if year in s), None)) if any(year in s for s in prehab_sheets) else None
-    non_df = parse_sheet(xl, next((s for s in non_prehab_sheets if year in s), None)) if any(year in s for s in non_prehab_sheets) else None
-    pre_count = pre_df['F2F Prehab Assessment?'].count() if pre_df is not None else 0
-    non_count = non_df['DOB (DD/MM/YYYY)'].count() if non_df is not None else 0
-    pct = (pre_count / (pre_count + non_count)) * 100 if pre_count > 0 and non_count > 0 else None
-    prehab_counts.append(pre_count)
-    prehab_percentages.append(pct)
+    prehab_sheet = next((s for s in prehab_sheets if year in s), None)
+    non_prehab_sheet = next((s for s in non_prehab_sheets if year in s), None)
 
-count_df = pd.DataFrame({'Year': years, 'Prehab Count': prehab_counts})
-percent_df = pd.DataFrame({'Year': years, 'Prehab %': prehab_percentages})
-percent_df['Display Label'] = ['No data' if pd.isna(p) else '' for p in percent_df['Prehab %']]
-percent_df['Prehab %'] = percent_df['Prehab %'].fillna(0)
+    if prehab_sheet:
+        prehab_df = parse_sheet(xl, prehab_sheet)
+        prehab_total = prehab_df['F2F Prehab Assessment?'].count()
+        prehab_surgical = prehab_df['Length of Stay'].count()
+    else:
+        prehab_total = np.nan
+        prehab_surgical = np.nan
 
+    if non_prehab_sheet:
+        non_prehab_df = parse_sheet(xl, non_prehab_sheet)
+        non_prehab_surgical = non_prehab_df['DOB (DD/MM/YYYY)'].count()
+    else:
+        non_prehab_surgical = np.nan
+
+    prehab_total_counts.append(prehab_total)
+    prehab_surgical_counts.append(prehab_surgical)
+    non_prehab_surgical_counts.append(non_prehab_surgical)
+
+# Prepare dataframes
+count_df = pd.DataFrame({
+    'Year': years,
+    'Prehab Count': prehab_total_counts
+})
+
+# Calculate % Surgical Patients Having Prehab
+percentages = []
+display_labels = []
+for pre, non in zip(prehab_surgical_counts, non_prehab_surgical_counts):
+    if pd.isna(pre) or pd.isna(non) or non == 0:
+        percentages.append(0)
+        display_labels.append('No data')
+    else:
+        pct = (pre / (pre + non)) * 100 if pre + non > 0 else 0
+        percentages.append(pct)
+        display_labels.append('')
+
+percent_df = pd.DataFrame({
+    'Year': years,
+    'Prehab %': percentages,
+    'Display Label': display_labels
+})
+
+# --- Plot 1: Total Prehab Patients ---
 fig1, ax1 = plt.subplots(figsize=(3, 2))
-colors = ['gray']
-sns.barplot(data=count_df, x='Year', y='Prehab Count', ax=ax1, palette=colors)
+sns.barplot(data=count_df, x='Year', y='Prehab Count', ax=ax1, color='gray')
 ax1.set_title('Prehab Patients Each Year', fontsize=8)
 ax1.set_ylabel('Number of Patients', fontsize=6)
 ax1.set_xlabel('Year', fontsize=6)
 ax1.tick_params(labelsize=6)
 sns.despine()
 plt.tight_layout()
-
 center_pyplot(fig1)
 
+# --- Plot 2: % Surgical Patients Having Prehab ---
 fig2, ax2 = plt.subplots(figsize=(3, 2))
-colors_pct = ['gray']
-sns.barplot(data=percent_df, x='Year', y='Prehab %', ax=ax2, palette=colors_pct)
+sns.barplot(data=percent_df, x='Year', y='Prehab %', ax=ax2, color='gray')
 for idx, row in percent_df.iterrows():
     if row['Display Label']:
         ax2.text(idx, 2, row['Display Label'], ha='center', fontsize=6, color='gray')
@@ -223,13 +245,28 @@ ax2.set_ylim(0, 100)
 ax2.tick_params(labelsize=6)
 sns.despine()
 plt.tight_layout()
-
 center_pyplot(fig2)
+
+# --- Summary Table ---
+summary_table = pd.DataFrame({
+    'Total Prehab Patients': prehab_total_counts,
+    'Surgical Prehab Patients': prehab_surgical_counts,
+    'Surgical Non-Prehab Patients': non_prehab_surgical_counts
+}, index=years)
+
+# Replace rows where Non-Prehab Surgical = 0 with 'No data'
+for year in summary_table.index:
+    if summary_table.loc[year, 'Surgical Non-Prehab Patients'] == 0:
+        summary_table.loc[year] = 'No data'
+
+st.subheader("Summary Table")
+st.dataframe(summary_table, use_container_width=True)
+
 
 # ----------------------------
 # Section 2: Prehab Duration
 # ----------------------------
-st.header("How long are patients receiving prehab?", divider=True)
+st.header("Prehab Duration", divider=True)
 duration_data = []
 for year in years:
     sheet = next((s for s in prehab_sheets if year in s), None)
@@ -246,7 +283,7 @@ if not duration_df.empty:
     fig, ax = plt.subplots(figsize=(4, 2.5))
     sns.violinplot(data=duration_df, x='Year', y='Prehab duration', color='gray', ax=ax)
     ax.set_title('Distribution of Prehab Duration by Year', fontsize=10)
-    ax.set_ylabel('Duration (days)', fontsize=8)
+    ax.set_ylabel('Duration (days)*', fontsize=8)
     ax.set_xlabel('Year', fontsize=6)
     ax.tick_params(labelsize=7)
     sns.despine()
@@ -256,10 +293,12 @@ if not duration_df.empty:
 
 st.markdown ("*calculated as difference between date of surgery and date of first prehab assessment")
 # ----------------------------
-# Section 3a: Population Pyramid
+# Section 3: Population Pyramid, Bubble Map, Surgical Info
 # ----------------------------
 st.header("Population Demographics and Surgical Information", divider=True)
-selected_year = st.selectbox("Select Year", years, index=years.index(max(years)))
+
+years_options = ['All Years'] + years
+selected_year = st.selectbox("Select Year", years_options, index=years_options.index(max(years)))
 group_mode = st.radio("View Mode", ['Combined', 'Split by Prehab/Non-Prehab'], horizontal=True)
 
 age_bins = list(range(0, 101, 5))
@@ -278,6 +317,16 @@ def load_and_clean_age_gender(_xl, sheet_name):
         df['Gender'] = df['Gender'].astype(str).str.strip().str.lower().map(gender_map)
         df = df.dropna(subset=['Gender'])
         return df[['Age', 'Gender']]
+    return pd.DataFrame()
+
+def load_postcode_data(sheet_name, group_label, _xl):
+    df = parse_sheet(_xl, sheet_name)
+    if 'Postcode' in df.columns:
+        df = df[['Postcode']].dropna()
+        df['Postcode'] = df['Postcode'].astype(str).str.replace(" ", "").str.upper()
+        df['Sector'] = df['Postcode'].str[:4]
+        df['Group'] = group_label
+        return df[['Sector', 'Group']]
     return pd.DataFrame()
 
 def get_pyramid_data(df):
@@ -302,44 +351,48 @@ def plot_population_pyramid(male, female, title):
     )
     st.plotly_chart(fig, use_container_width=True)
 
-prehab_sheet = next((s for s in prehab_sheets if selected_year in s), None)
-non_prehab_sheet = next((s for s in non_prehab_sheets if selected_year in s), None)
+# --- Select sheets ---
+if selected_year == 'All Years':
+    prehab_sheets_selected = prehab_sheets
+    non_prehab_sheets_selected = non_prehab_sheets
+else:
+    prehab_sheets_selected = [s for s in prehab_sheets if selected_year in s]
+    non_prehab_sheets_selected = [s for s in non_prehab_sheets if selected_year in s]
+
+# --- 3a: Population Pyramid ---
 if group_mode == 'Combined':
     combined_df = pd.concat([
-        load_and_clean_age_gender(xl, prehab_sheet) if prehab_sheet else pd.DataFrame(),
-        load_and_clean_age_gender(xl, non_prehab_sheet) if non_prehab_sheet else pd.DataFrame()
-    ])
+        pd.concat([load_and_clean_age_gender(xl, s) for s in prehab_sheets_selected], ignore_index=True),
+        pd.concat([load_and_clean_age_gender(xl, s) for s in non_prehab_sheets_selected], ignore_index=True)
+    ], ignore_index=True)
+
     if not combined_df.empty:
         male, female = get_pyramid_data(combined_df)
-        plot_population_pyramid(male, female, f"Combined Population Pyramid – {selected_year}")
+        title_text = f"Combined Population Pyramid – {selected_year}"
+        plot_population_pyramid(male, female, title_text)
 else:
     col1, col2 = st.columns(2)
+
     with col1:
-        if prehab_sheet:
-            df = load_and_clean_age_gender(xl, prehab_sheet)
-            if not df.empty:
-                male, female = get_pyramid_data(df)
-                plot_population_pyramid(male, female, f"Prehab – {selected_year}")
+        prehab_df = pd.concat([load_and_clean_age_gender(xl, s) for s in prehab_sheets_selected], ignore_index=True)
+        if not prehab_df.empty:
+            male, female = get_pyramid_data(prehab_df)
+            plot_population_pyramid(male, female, f"Prehab – {selected_year}")
+
     with col2:
-        if non_prehab_sheet:
-            df = load_and_clean_age_gender(xl, non_prehab_sheet)
-            if not df.empty:
-                male, female = get_pyramid_data(df)
-                plot_population_pyramid(male, female, f"Non-Prehab – {selected_year}")
+        nonprehab_df = pd.concat([load_and_clean_age_gender(xl, s) for s in non_prehab_sheets_selected], ignore_index=True)
+        if not nonprehab_df.empty:
+            male, female = get_pyramid_data(nonprehab_df)
+            plot_population_pyramid(male, female, f"Non-Prehab – {selected_year}")
 
-
-# ----------------------------
-# Section 3b: Bubble Map
-# ----------------------------
+# --- 3b: Bubble Map ---
 coords_df = load_postcode_lookup()
 
-prehab_sheet = next((s for s in prehab_sheets if selected_year in s), None)
-non_prehab_sheet = next((s for s in non_prehab_sheets if selected_year in s), None)
+pre_geo_df = pd.concat([load_postcode_data(s, "Prehab", xl) for s in prehab_sheets_selected], ignore_index=True)
+non_geo_df = pd.concat([load_postcode_data(s, "Non-Prehab", xl) for s in non_prehab_sheets_selected], ignore_index=True)
 
-pre_df = load_postcode_data(prehab_sheet, "Prehab", xl) if prehab_sheet else pd.DataFrame()
-nonpre_df = load_postcode_data(non_prehab_sheet, "Non-Prehab", xl) if non_prehab_sheet else pd.DataFrame()
+grouped_geo = pd.concat([pre_geo_df, non_geo_df])
 
-grouped_geo = pd.concat([pre_df, nonpre_df])
 if not grouped_geo.empty:
     geo_counts = grouped_geo.groupby(['Sector', 'Group']).size().reset_index(name='Count')
     map_df = geo_counts.merge(coords_df, on='Sector', how='inner')
@@ -368,24 +421,20 @@ if not grouped_geo.empty:
 else:
     st.info("No postcode data available for mapping.")
 
-
-# ----------------------------
-# Section 3c: Surgical Information Chart
-# ----------------------------
+# --- 3c: Surgical Info ---
 surgery_category = st.selectbox("Select Surgery Grouping", ["Standard vs Complex", "Open vs Laparoscopic vs Robotic"])
 
-# Load classification using cache
-pre_standard, pre_approach = load_surgery_classification(prehab_sheet, lambda s: parse_sheet(xl, s))
-non_standard, non_approach = load_surgery_classification(non_prehab_sheet, lambda s: parse_sheet(xl, s))
+pre_dfs = [load_surgery_classification(s, lambda sname: parse_sheet(xl, sname)) for s in prehab_sheets_selected]
+non_dfs = [load_surgery_classification(s, lambda sname: parse_sheet(xl, sname)) for s in non_prehab_sheets_selected]
 
 if surgery_category == "Standard vs Complex":
-    pre_df = pd.DataFrame({"Type": pre_standard, "Group": "Prehab"})
-    non_df = pd.DataFrame({"Type": non_standard, "Group": "Non-Prehab"})
+    pre_combined = pd.concat([pd.DataFrame({"Type": std, "Group": "Prehab"}) for std, _ in pre_dfs], ignore_index=True)
+    non_combined = pd.concat([pd.DataFrame({"Type": std, "Group": "Non-Prehab"}) for std, _ in non_dfs], ignore_index=True)
 else:
-    pre_df = pd.DataFrame({"Type": pre_approach, "Group": "Prehab"})
-    non_df = pd.DataFrame({"Type": non_approach, "Group": "Non-Prehab"})
+    pre_combined = pd.concat([pd.DataFrame({"Type": app, "Group": "Prehab"}) for _, app in pre_dfs], ignore_index=True)
+    non_combined = pd.concat([pd.DataFrame({"Type": app, "Group": "Non-Prehab"}) for _, app in non_dfs], ignore_index=True)
 
-surg_combined = pd.concat([pre_df, non_df])
+surg_combined = pd.concat([pre_combined, non_combined])
 
 if not surg_combined.empty:
     count_df = surg_combined.groupby(["Type", "Group"]).size().reset_index(name="Count")
@@ -642,6 +691,8 @@ if prehab_sheets_filtered and nonprehab_sheets_filtered:
 
     else:
         # Handle categorical/binary data
+        show_percent = st.checkbox("Show % Instead of Count", value=False)
+
         if col_type == "binary":
             pre_clean = pre_df[col].map({0: "No", 1: "Yes"}).dropna()
             non_clean = non_df[col].map({0: "No", 1: "Yes"}).dropna()
@@ -666,17 +717,26 @@ if prehab_sheets_filtered and nonprehab_sheets_filtered:
             pd.crosstab(non_clean, columns="Non-Prehab"), how="outer"
         ).fillna(0)
 
-        ct_reset = ct.reset_index().melt(id_vars=ct.index.name, value_name="Count", var_name="Group")
+        if show_percent:
+            ct_percent = ct.div(ct.sum(axis=0), axis=1) * 100
+            ct_reset = ct_percent.reset_index().melt(id_vars=ct.index.name, value_name="Percent", var_name="Group")
+            y_axis = "Percent"
+            y_title = "%"
+        else:
+            ct_reset = ct.reset_index().melt(id_vars=ct.index.name, value_name="Count", var_name="Group")
+            y_axis = "Count"
+            y_title = "Count"
 
         fig = px.bar(
             ct_reset,
             x=ct.index.name,
-            y="Count",
+            y=y_axis,
             color="Group",
             barmode="group",
             color_discrete_map={"Prehab": "purple", "Non-Prehab": "gold"},
             title=f"{selected_clinical_outcome} (Filtered: {surgery_filter})"
         )
+
         if selected_clinical_outcome == "Clavien-Dindo Score":
             fig.update_layout(
                 xaxis=dict(
@@ -686,6 +746,10 @@ if prehab_sheets_filtered and nonprehab_sheets_filtered:
                     categoryarray=valid_grades
                 )
             )
+
+        fig.update_layout(
+            yaxis_title=y_title
+        )
 
         chi2, p_val, _, _ = chi2_contingency(ct.values)
 
@@ -702,5 +766,7 @@ if prehab_sheets_filtered and nonprehab_sheets_filtered:
                 """,
                 unsafe_allow_html=True
             )
+
+
 else:
     st.warning("Matching sheets not found for the selected years.")
