@@ -471,6 +471,14 @@ else:
 # Section 4: Functional Outcomes
 # ----------------------------
 st.header("Functional Outcomes", divider=True)
+
+def format_p_value(p_val):
+    """Format p-value with up to 3 decimal places, 2 significant figures, and <0.001 threshold."""
+    if p_val < 0.001:
+        return "<0.001"
+    else:
+        return f"{p_val:.3g}"
+
 selected_func_year = st.selectbox("Select Year for Functional Outcome", years, index=years.index("2024"))
 outcomes = [
     {"name": "Rockwood", "label": "Rockwood (<span style='color:green'>&darr;</span> is better)", "t1": "T1 Rockwood", "t2": "T2 Rockwood", "better": "lower"},
@@ -587,18 +595,19 @@ if func_sheet:
             st.markdown("<div style='margin-top: 20px;'></div>", unsafe_allow_html=True)
             st.plotly_chart(hist_fig, use_container_width=True)
             st.markdown("<div style='margin-bottom: 10px;'></div>", unsafe_allow_html=True)
+            p_val_display = format_p_value(p_val)
             st.markdown(
                 f"""
                 <div style='text-align: center; background-color: transparent; padding: 8px; border-radius: 6px; margin-top: -10px;'>
                     <span style='font-size:15px;'>
-                    <strong>p-value</strong> = <span style='color:{p_color}'>{p_val:.3f}</span><br>
+                    <strong>p-value</strong> <span style='color:{p_color}'>{p_val_display}</span><br>
                     <strong>% Improved</strong>: <span style='color:{improved_color}'>{improved:.1f}%</span>
                     </span>
                 </div>
                 """,
                 unsafe_allow_html=True
-
             )
+
     else:
         st.warning(f"Columns not found for {outcome['label']}")
 else:
@@ -700,10 +709,11 @@ if prehab_sheets_filtered and nonprehab_sheets_filtered:
 
         with badge_col:
             p_color = "red" if p_val < 0.05 else "gray"
+            p_val_display = format_p_value(p_val)
             st.markdown(
                 f"""
-                <div style='text-align: center; padding: 10px; font-size: 16px; margin-top: 180px;'>
-                    <strong>p-value =</strong> <span style='color:{p_color}'>{p_val:.4f}</span>
+                <div style='text-align: center; padding: 10px; font-size: 16px; margin-top: 18px;'>
+                    <strong>p-value </strong> <span style='color:{p_color}'>{p_val_display}</span>
                 </div>
                 """,
                 unsafe_allow_html=True
@@ -778,10 +788,11 @@ if prehab_sheets_filtered and nonprehab_sheets_filtered:
 
         with badge_col:
             p_color = "red" if p_val < 0.05 else "gray"
+            p_val_display = format_p_value(p_val)
             st.markdown(
                 f"""
                 <div style='text-align: center; padding: 10px; font-size: 16px; margin-top: 180px;'>
-                    <strong>p-value =</strong> <span style='color:{p_color}'>{p_val:.4f}</span>
+                    <strong>p-value </strong> <span style='color:{p_color}'>{p_val_display}</span>
                 </div>
                 """,
                 unsafe_allow_html=True
